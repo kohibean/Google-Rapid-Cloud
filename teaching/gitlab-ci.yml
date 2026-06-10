@@ -1,0 +1,66 @@
+# .gitlab-ci.yml
+#
+# METHOD 2 — GitLab CI/CD: deploy the SiningAI frontend (Vite/React) directly to Vercel.
+# Pattern: validate the build on every push, deploy a PREVIEW for merge requests, and
+# deploy to PRODUCTION only on main. Uses Vercel's recommended CLI flow (pull → build → deploy).
+#
+# Required CI/CD variables (Settings → CI/CD → Variables), all "Masked":
+#   VERCEL_TOKEN        – personal/team token from Vercel
+#   VERCEL_ORG_ID       – from `.vercel/project.json` after `vercel link`
+#   VERCEL_PROJECT_ID   – from `.vercel/project.json`
+
+stages:
+  - validate
+  - deploy
+
+default:
+  image: node:20-alpine
+  # Cache deps keyed on the lockfile so unchanged deps aren't re-downloaded every run.
+  cache:
+    key:
+      files:
+        - frontend/package-lock.json
+    paths:
+      - frontend/node_modules/
+
+# Vercel CLI reads these to know which project it's deploying.
+variables:
+  VERCEL_ORG_ID: $VERCEL_ORG_ID
+  VERCEL_PROJECT_ID: $VERCEL_PROJECT_ID
+
+# 1) Fast feedback: does it even build? Runs on every push and MR.
+build:validate:
+  stage: validate
+  script:
+    - cd frontend
+    - npm ci
+    - npm run build
+
+# 2) Preview deploy for every merge request — gives reviewers a live URL.
+deploy:preview:
+  stage: deploy
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - npm install -g vercel
+    - cd frontend
+    - vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+    - vercel build --token="$VERCEL_TOKEN"
+    - vercel deploy --prebuilt --token="$VERCEL_TOKEN"
+  environment:
+    name: review/$CI_COMMIT_REF_SLUG
+
+# 3) Production deploy, only from the default branch.
+deploy:production:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - npm install -g vercel
+    - cd frontend
+    - vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+    - vercel build --prod --token="$VERCEL_TOKEN"
+    - vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+  environment:
+    name: production
+    url: https://siningai.vercel.app

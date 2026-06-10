@@ -1,0 +1,71 @@
+# docker-compose.yml
+#
+# METHOD 4 — Docker Compose: define and run the whole SiningAI stack with one command,
+# for local development and small single-server deployments.
+#
+#   docker compose up --build              -> backend + frontend
+#   docker compose --profile full up       -> also runs the MongoDB MCP server locally
+#
+# NOTE: the top-level `version:` key is obsolete in Compose v2 and is intentionally omitted.
+
+name: siningai
+
+services:
+  # ----- Python ADK agent -----
+  backend:
+    build:
+      # context is repo root because requirements.txt lives there, not inside siningai_agent/.
+      context: .
+      dockerfile: siningai_agent/Dockerfile
+    image: siningai-agent:local
+    env_file:
+      - ./siningai_agent/.env   # GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION, MCP_SERVER_URL, SININGAI_MODEL, ...
+    environment:
+      PORT: "8000"              # override Cloud Run default (8080); vite proxy points to :8000
+    ports:
+      - "8000:8000"
+    # No depends_on mcp: the agent talks to the Cloud Run MCP server (MCP_SERVER_URL in .env).
+    # Only add this dependency when testing with the local 'full' profile MCP container.
+    networks:
+      - siningai-net
+    restart: unless-stopped
+
+  # ----- Vite/React frontend, served by nginx -----
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Inside the Compose network, the browser still talks to the host-published port,
+        # so localhost:8000 is correct for local dev.
+        VITE_API_URL: "http://localhost:8000"
+    image: siningai-frontend:local
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy   # waits for the backend HEALTHCHECK to pass
+    networks:
+      - siningai-net
+    restart: unless-stopped
+
+  # ----- MongoDB MCP server (talks to MongoDB Atlas in the cloud) -----
+  # Optional: only starts under the "full" profile, since Atlas is remote and you may
+  # already run the MCP server on Cloud Run.
+  mcp:
+    image: mongodb/mongodb-mcp-server:1.11.0
+    # --httpHost 0.0.0.0 is REQUIRED for other containers to reach it (default binds to 127.0.0.1).
+    # Clients connect to http://mcp:3000/mcp inside the network.
+    command: ["--transport", "http", "--httpHost", "0.0.0.0", "--httpPort", "3000"]
+    environment:
+      MDB_MCP_CONNECTION_STRING: ${MDB_MCP_CONNECTION_STRING}
+    ports:
+      - "3000:3000"
+    networks:
+      - siningai-net
+    restart: unless-stopped
+    profiles: ["full"]
+
+networks:
+  siningai-net:
+    driver: bridge

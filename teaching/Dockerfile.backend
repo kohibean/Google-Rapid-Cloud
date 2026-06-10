@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1
+#
+# SiningAI agent — Python ADK multi-agent system (Gemini via Vertex AI + MongoDB MCP).
+# Single-stage build: Python apps don't need a separate compile step like the frontend does.
+#
+# Build context: repo root (not siningai_agent/) because requirements.txt lives at root.
+# Recommended: add a .dockerignore at the repo root to exclude siningai_agent/.env,
+# siningai_agent/__pycache__, and siningai_agent/.adk/ (secrets are injected at runtime).
+
+FROM python:3.12-slim AS runtime
+
+# - PYTHONUNBUFFERED: logs stream straight to stdout (so Cloud Run / docker logs show them live)
+# - PYTHONDONTWRITEBYTECODE: don't litter the image with .pyc files
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# curl is only here so the HEALTHCHECK below can hit the server. Keep the layer slim.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# requirements.txt lives at repo root. Copy it first for layer caching — this layer only
+# re-runs when deps change, so day-to-day code edits don't trigger a full reinstall.
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Copy only the agent package. ADK discovers it because the trailing "." in the CMD tells
+# it to look for agent packages in the working directory (/app → finds siningai_agent/).
+COPY siningai_agent/ ./siningai_agent/
+
+# Run as a non-root user — a basic, free security hardening step worth teaching.
+RUN useradd --create-home --uid 1001 appuser
+USER appuser
+
+# Cloud Run injects the PORT env var (defaults to 8080). ADK's own default is 8000.
+# docker-compose.yml overrides PORT=8000 so the same image works in both environments.
+ENV PORT=8080
+EXPOSE 8080
+
+# Liveness probe. ADK's API server exposes GET /list-apps; adjust to any 200-returning route
+# if your ADK version differs.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -fsS "http://localhost:${PORT}/list-apps" || exit 1
+
+# Bind to 0.0.0.0 so the server is reachable from outside the container. The trailing "."
+# tells ADK to look for agent packages in /app (finds siningai_agent/).
+CMD ["sh", "-c", "adk api_server --host 0.0.0.0 --port ${PORT} ."]

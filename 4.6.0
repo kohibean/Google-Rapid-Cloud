@@ -1,0 +1,15 @@
+Requirement already satisfied: requests in c:\users\robincpe\onedrive\desktop\hackathons\google-rapid-cloud\siningai\lib\site-packages (2.34.2)
+Requirement already satisfied: python-dotenv in c:\users\robincpe\onedrive\desktop\hackathons\google-rapid-cloud\siningai\lib\site-packages (1.2.2)
+Collecting pymongo
+  Downloading pymongo-4.17.0-cp312-cp312-win_amd64.whl.metadata (10 kB)
+Requirement already satisfied: charset_normalizer<4,>=2 in c:\users\robincpe\onedrive\desktop\hackathons\google-rapid-cloud\siningai\lib\site-packages (from requests) (3.4.7)
+Requirement already satisfied: idna<4,>=2.5 in c:\users\robincpe\onedrive\desktop\hackathons\google-rapid-cloud\siningai\lib\site-packages (from requests) (3.16)
+Requirement already satisfied: urllib3<3,>=1.26 in c:\users\robincpe\onedrive\desktop\hackathons\google-rapid-cloud\siningai\lib\site-packages (from requests) (2.7.0)
+Requirement already satisfied: certifi>=2023.5.7 in c:\users\robincpe\onedrive\desktop\hackathons\google-rapid-cloud\siningai\lib\site-packages (from requests) (2026.5.20)
+Collecting dnspython<3.0.0,>=2.6.1 (from pymongo)
+  Downloading dnspython-2.8.0-py3-none-any.whl.metadata (5.7 kB)
+Downloading pymongo-4.17.0-cp312-cp312-win_amd64.whl (920 kB)
+   ---------------------------------------- 920.3/920.3 kB 10.6 MB/s eta 0:00:00
+Downloading dnspython-2.8.0-py3-none-any.whl (331 kB)
+Installing collected packages: dnspython, pymongo
+Successfully installed dnspython-2.8.0 pymongo-4.17.0

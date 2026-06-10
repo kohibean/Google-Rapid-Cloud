@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { font-feature-settings: "ss01", "kern", "liga"; }
+  body {
+    @apply bg-paper text-ink font-serif antialiased;
+    background-image:
+      radial-gradient(circle at 15% 20%, rgba(192, 138, 45, 0.025) 0%, transparent 45%),
+      radial-gradient(circle at 85% 75%, rgba(181, 83, 42, 0.025) 0%, transparent 45%);
+  }
+  h1, h2, h3 { @apply font-display tracking-tight; }
+}
+
+@layer components {
+  .smallcaps {
+    @apply font-sans uppercase tracking-smallcaps text-[11px] text-ink-soft font-medium;
+  }
+  .pull-rule {
+    @apply border-t border-ink;
+  }
+  .hairline {
+    @apply border-t border-rule;
+  }
+  .editorial-card {
+    @apply bg-paper border border-rule p-5 transition-all duration-200;
+  }
+  .editorial-card:hover {
+    @apply border-ink-soft -translate-y-0.5;
+    box-shadow: 0 4px 0 -2px rgba(26, 24, 21, 0.08);
+  }
+  .btn-primary {
+    @apply font-display text-[15px] font-medium px-5 py-2.5 bg-ink text-paper
+           transition-colors duration-150 hover:bg-accent disabled:bg-ink-soft disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply font-sans text-[11px] tracking-wide uppercase px-3 py-1.5 border border-ink-soft
+           text-ink-soft hover:bg-ink hover:text-paper hover:border-ink transition-colors duration-150;
+  }
+  .field {
+    @apply font-serif text-[16px] px-3.5 py-2.5 bg-paper border border-ink-soft
+           focus:border-accent focus:outline-none transition-colors;
+  }
+}

@@ -1,0 +1,97 @@
+// Jenkinsfile
+//
+// METHOD 3 — Jenkins (declarative pipeline): build the SiningAI agent image, push it to
+// Google Artifact Registry, then deploy the container to Cloud Run (its real target).
+//
+// Prerequisites on the Jenkins agent: docker, the gcloud CLI.
+// Jenkins credentials (Manage Jenkins → Credentials):
+//   gcp-sa-key   – "Secret file": a GCP service-account JSON key with
+//                  Artifact Registry Writer + Cloud Run Admin + Service Account User.
+
+pipeline {
+    // 'agent any' runs on any available node. In production you'd pin a labelled agent
+    // that has docker + gcloud installed, e.g. agent { label 'gcp-builder' }.
+    agent any
+
+    environment {
+        REGISTRY      = 'us-central1-docker.pkg.dev'
+        GCP_PROJECT   = 'cryptic-now-495905-r2'   // actual project ID (from siningai_agent/.env)
+        AR_REPO       = 'siningai-images'
+        IMAGE         = "${REGISTRY}/${GCP_PROJECT}/${AR_REPO}/siningai-agent"
+        CLOUD_RUN_SVC = 'siningai-agent'
+        REGION        = 'us-central1'
+    }
+
+    options {
+        timestamps()                                   // timestamped console output
+        disableConcurrentBuilds()                      // no overlapping deploys
+        buildDiscarder(logRotator(numToKeepStr: '15')) // keep last 15 builds only
+    }
+
+    stages {
+        stage('Checkout') {
+            steps { checkout scm }
+        }
+
+        stage('Build image') {
+            steps {
+                // Use the short commit SHA as an immutable tag.
+                script {
+                    env.TAG = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                }
+                // context is repo root (requirements.txt lives there); Dockerfile is in siningai_agent/.
+                sh 'docker build -f siningai_agent/Dockerfile -t $IMAGE:$TAG -t $IMAGE:latest .'
+            }
+        }
+
+        stage('Authenticate to GCP') {
+            steps {
+                // withCredentials injects the secret file path into GCP_KEY for this block only,
+                // then scrubs it from the environment afterward.
+                withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY')]) {
+                    sh '''
+                        gcloud auth activate-service-account --key-file="$GCP_KEY"
+                        gcloud auth configure-docker $REGISTRY --quiet
+                        gcloud config set project $GCP_PROJECT
+                    '''
+                }
+            }
+        }
+
+        stage('Push image') {
+            steps {
+                sh 'docker push $IMAGE:$TAG'
+                sh 'docker push $IMAGE:latest'
+            }
+        }
+
+        stage('Deploy to Cloud Run') {
+            when { branch 'main' }   // only the main branch reaches production
+            steps {
+                // Non-secret config goes in --set-env-vars.
+                // SECRETS (Mongo URI, Voyage key) should come from Secret Manager via
+                // --set-secrets, NOT plain env vars. See the teaching guide.
+                sh '''
+                    gcloud run deploy $CLOUD_RUN_SVC \
+                        --image $IMAGE:$TAG \
+                        --region $REGION \
+                        --platform managed \
+                        --allow-unauthenticated \
+                        --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_PROJECT=$GCP_PROJECT,GOOGLE_CLOUD_LOCATION=$REGION,SININGAI_MODEL=gemini-2.5-pro \
+                        --set-secrets MCP_SERVER_URL=mcp-server-url:latest
+                '''
+                // MDB_MCP_CONNECTION_STRING and VOYAGE_API_KEY are NOT used by this agent.
+                // The agent reaches MongoDB only via MCP_SERVER_URL (the Cloud Run MCP server).
+                // Store that URL in Secret Manager as "mcp-server-url" (or move to --set-env-vars
+                // if you consider a Cloud Run service URL non-sensitive).
+            }
+        }
+    }
+
+    // post blocks always run after the stages, regardless of outcome.
+    post {
+        success { echo "✅ Deployed ${IMAGE}:${TAG} to Cloud Run service ${CLOUD_RUN_SVC}" }
+        failure { echo '❌ Pipeline failed — inspect the failing stage above.' }
+        always  { sh 'docker image prune -f || true' }  // reclaim disk on the agent
+    }
+}
