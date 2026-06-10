@@ -1,6 +1,27 @@
+# secrets
 .env
+.env.*
+
+# ADK local state
 .adk
+
+# Python venv
 Lib
 Include
 Scripts
+pyvenv.cfg
+4.6.0/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Editor
 claude.md
+.vscode/
